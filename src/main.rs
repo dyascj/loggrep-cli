@@ -1,3 +1,4 @@
+mod config;
 mod display;
 mod filter;
 mod follow;
@@ -7,6 +8,8 @@ mod stats;
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::{generate, Shell};
+use flate2::read::GzDecoder;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
@@ -24,6 +27,8 @@ use std::path::PathBuf;
   loggrep app.log --stats                  Show stats summary
   loggrep app.log -f                       Follow mode (like tail -f)
   loggrep app.log -l error -p "OOM" -s     Combine filters + stats
+  loggrep app.log -p "panic" -C 5          Context lines around matches
+  loggrep app.log.gz -l error              Read gzip files directly
   cat app.log | loggrep                    Read from stdin"#)]
 struct Cli {
     /// Log file(s) to parse. Omit to read from stdin.
@@ -75,19 +80,42 @@ struct Cli {
     #[arg(short = 'c', long = "count")]
     count_only: bool,
 
+    /// Show N lines of context around matches (like grep -C)
+    #[arg(short = 'C', long = "context", value_name = "N")]
+    context: Option<usize>,
+
+    /// Show N lines before each match (like grep -B)
+    #[arg(short = 'B', long = "before-context", value_name = "N")]
+    before_context: Option<usize>,
+
+    /// Show N lines after each match (like grep -A)
+    #[arg(short = 'A', long = "after-context", value_name = "N")]
+    after_context: Option<usize>,
+
     /// Generate shell completions (bash, zsh, fish, elvish, powershell)
     #[arg(long = "completions", value_name = "SHELL")]
     completions: Option<Shell>,
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
 
     // shell completions
     if let Some(shell) = cli.completions {
         let mut cmd = Cli::command();
         generate(shell, &mut cmd, "loggrep", &mut io::stdout());
         return Ok(());
+    }
+
+    // apply config file defaults
+    let cfg = config::load_config();
+    if cli.level.is_none() {
+        if let Some(ref level) = cfg.level {
+            cli.level = Some(level.clone());
+        }
+    }
+    if !cli.line_numbers && cfg.line_numbers {
+        cli.line_numbers = true;
     }
 
     // build filter
@@ -137,6 +165,8 @@ fn main() -> Result<()> {
     // normal mode: process files or stdin
     let mut log_stats = stats::Stats::new();
 
+    let file_prefix = cli.files.len() > 1;
+
     if cli.files.is_empty() {
         // read from stdin
         let stdin = io::stdin();
@@ -147,10 +177,11 @@ fn main() -> Result<()> {
             &mut log_stats,
             &cli,
             highlight,
+            None,
         )?;
     } else {
         for path in &cli.files {
-            if cli.files.len() > 1 {
+            if file_prefix {
                 println!(
                     "{}",
                     colored::Colorize::bold(
@@ -162,14 +193,22 @@ fn main() -> Result<()> {
             }
             let file = File::open(path)
                 .context(format!("Failed to open file: {}", path.display()))?;
-            let reader = BufReader::new(file);
-            process_lines(
-                reader,
-                &log_filter,
-                &mut log_stats,
-                &cli,
-                highlight,
-            )?;
+
+            let filename = if file_prefix {
+                Some(path.display().to_string())
+            } else {
+                None
+            };
+
+            // handle gzip files
+            if path.extension().is_some_and(|ext| ext == "gz") {
+                let decoder = GzDecoder::new(file);
+                let reader = BufReader::new(decoder);
+                process_lines(reader, &log_filter, &mut log_stats, &cli, highlight, filename.as_deref())?;
+            } else {
+                let reader = BufReader::new(file);
+                process_lines(reader, &log_filter, &mut log_stats, &cli, highlight, filename.as_deref())?;
+            }
         }
     }
 
@@ -189,7 +228,16 @@ fn process_lines<R: BufRead>(
     log_stats: &mut stats::Stats,
     cli: &Cli,
     highlight: Option<&regex::Regex>,
+    filename: Option<&str>,
 ) -> Result<()> {
+    let before = cli.before_context.or(cli.context).unwrap_or(0);
+    let after = cli.after_context.or(cli.context).unwrap_or(0);
+    let use_context = before > 0 || after > 0;
+
+    let mut before_buf: VecDeque<parser::LogLine> = VecDeque::new();
+    let mut after_remaining: usize = 0;
+    let mut last_printed_line: usize = 0;
+
     for (i, line) in reader.lines().enumerate() {
         let line = line?;
         let trimmed = line.trim_end();
@@ -202,16 +250,72 @@ fn process_lines<R: BufRead>(
 
         log_stats.record(&parsed, matched);
 
-        if matched && !cli.stats_only && !cli.count_only {
-            if cli.json_output {
-                print_json_line(&parsed);
-            } else {
-                display::print_line(&parsed, cli.line_numbers, highlight);
+        if cli.stats_only || cli.count_only {
+            continue;
+        }
+
+        if !use_context {
+            if matched {
+                print_output_line(&parsed, cli, highlight, filename);
+            }
+        } else if matched {
+            // print separator if there's a gap
+            if last_printed_line > 0 && parsed.line_number > last_printed_line + 1 {
+                let first_context_line = if before_buf.is_empty() {
+                    parsed.line_number
+                } else {
+                    before_buf.front().unwrap().line_number
+                };
+                if first_context_line > last_printed_line + 1 {
+                    println!("{}", colored::Colorize::dimmed("--"));
+                }
+            }
+
+            // print before-context lines
+            for ctx_line in before_buf.drain(..) {
+                if ctx_line.line_number > last_printed_line {
+                    print_output_line(&ctx_line, cli, None, filename);
+                    last_printed_line = ctx_line.line_number;
+                }
+            }
+
+            print_output_line(&parsed, cli, highlight, filename);
+            last_printed_line = parsed.line_number;
+            after_remaining = after;
+        } else if after_remaining > 0 {
+            print_output_line(&parsed, cli, None, filename);
+            last_printed_line = parsed.line_number;
+            after_remaining -= 1;
+        } else {
+            before_buf.push_back(parsed);
+            if before_buf.len() > before {
+                before_buf.pop_front();
             }
         }
     }
 
     Ok(())
+}
+
+fn print_output_line(
+    parsed: &parser::LogLine,
+    cli: &Cli,
+    highlight: Option<&regex::Regex>,
+    filename: Option<&str>,
+) {
+    if cli.json_output {
+        print_json_line(parsed);
+    } else {
+        if let Some(fname) = filename {
+            print!(
+                "{} ",
+                colored::Colorize::magenta(
+                    colored::Colorize::bold(format!("{}:", fname).as_str())
+                )
+            );
+        }
+        display::print_line(parsed, cli.line_numbers, highlight);
+    }
 }
 
 fn print_json_line(line: &parser::LogLine) {

@@ -59,6 +59,17 @@ loggrep app.log -f -l error
 kubectl logs my-pod | loggrep -p "timeout"
 journalctl -f | loggrep -l warn+
 
+# context lines (like grep -C/-B/-A)
+loggrep app.log -p "error" -C 3      # 3 lines before & after
+loggrep app.log -p "OOM" -B 5        # 5 lines before each match
+loggrep app.log -p "crash" -A 2      # 2 lines after each match
+
+# compressed logs
+loggrep app.log.gz -l error          # reads gzip files directly
+
+# multiple files
+loggrep *.log -l error               # prefixes each match with filename
+
 # other stuff
 loggrep app.log -c                   # count matches
 loggrep app.log -l error --json      # output as JSON
@@ -102,9 +113,37 @@ Works with stdin so you can pipe from `kubectl`, `journalctl`, `docker logs`, or
 
 Like `tail -f` but with all filtering and coloring applied. Uses filesystem events (kqueue/inotify) so it's not polling.
 
+### Context lines
+
+Show surrounding lines around matches, just like `grep -C`:
+
+```bash
+loggrep app.log -p "panic" -C 5      # 5 lines before and after
+loggrep app.log -p "OOM" -B 10       # 10 lines before each match
+loggrep app.log -p "timeout" -A 3    # 3 lines after each match
+```
+
+### Compressed logs
+
+Reads `.gz` files directly — no need to decompress first:
+
+```bash
+loggrep /var/log/syslog.1.gz -l error
+loggrep app.log.gz app.log -p "crash"   # mix compressed and plain
+```
+
 ### JSON logs
 
 Parses structured JSON logs (one object per line), extracts message/level/timestamp fields, and displays the rest as `key=value` pairs.
+
+### Config file
+
+Create `.loggrep.toml` in your project or `~/.config/loggrep/config.toml` for defaults:
+
+```toml
+line_numbers = true
+level = "warn+"
+```
 
 ### Shell completions
 
