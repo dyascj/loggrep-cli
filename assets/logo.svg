@@ -1,0 +1,17 @@
+<svg width="400" height="200" viewBox="0 0 400 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="120" y2="120">
+      <stop offset="0%" stop-color="#58A6FF" />
+      <stop offset="100%" stop-color="#3FB950" />
+    </linearGradient>
+  </defs>
+  <!-- Terminal prompt >_ -->
+  <text x="120" y="72" font-size="72" font-family="monospace" font-weight="bold" fill="url(#grad)">&gt;_</text>
+  <!-- Magnifying glass -->
+  <circle cx="262" cy="32" r="18" stroke="#58A6FF" stroke-width="4" fill="none" />
+  <line x1="275" y1="45" x2="286" y2="56" stroke="#58A6FF" stroke-width="4" stroke-linecap="round" />
+  <!-- Name -->
+  <text x="200" y="130" font-size="56" font-family="Inter, Helvetica, Arial, sans-serif" font-weight="800" fill="#E6EDF3" text-anchor="middle" letter-spacing="-2">loggrep</text>
+  <!-- Tagline -->
+  <text x="200" y="165" font-size="18" font-family="Inter, Helvetica, Arial, sans-serif" fill="#484F58" text-anchor="middle" font-style="italic">grep for logs, but actually useful.</text>
+</svg>
