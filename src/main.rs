@@ -5,7 +5,8 @@ mod parser;
 mod stats;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::{generate, Shell};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
@@ -73,10 +74,21 @@ struct Cli {
     /// Print only the count of matching lines
     #[arg(short = 'c', long = "count")]
     count_only: bool,
+
+    /// Generate shell completions (bash, zsh, fish, elvish, powershell)
+    #[arg(long = "completions", value_name = "SHELL")]
+    completions: Option<Shell>,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    // shell completions
+    if let Some(shell) = cli.completions {
+        let mut cmd = Cli::command();
+        generate(shell, &mut cmd, "loggrep", &mut io::stdout());
+        return Ok(());
+    }
 
     // build filter
     let mut log_filter = filter::Filter::new();

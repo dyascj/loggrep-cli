@@ -17,13 +17,15 @@ A log parser for the terminal that does what you actually want. Color-codes seve
 
 ## Install
 
-Requires [Rust](https://rustup.rs/).
+**From source** (requires [Rust](https://rustup.rs/)):
 
 ```bash
 git clone https://github.com/dyascj/loggrep-cli.git
 cd loggrep-cli
 cargo install --path .
 ```
+
+**Prebuilt binaries** — grab the latest from [Releases](https://github.com/dyascj/loggrep-cli/releases).
 
 ## Usage
 
@@ -103,6 +105,16 @@ Like `tail -f` but with all filtering and coloring applied. Uses filesystem even
 ### JSON logs
 
 Parses structured JSON logs (one object per line), extracts message/level/timestamp fields, and displays the rest as `key=value` pairs.
+
+### Shell completions
+
+Generate completions for your shell:
+
+```bash
+loggrep --completions bash > ~/.local/share/bash-completion/completions/loggrep
+loggrep --completions zsh > ~/.zfunc/_loggrep
+loggrep --completions fish > ~/.config/fish/completions/loggrep.fish
+```
 
 ## License
 

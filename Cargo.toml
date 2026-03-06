@@ -4,9 +4,15 @@ version = "0.1.0"
 edition = "2021"
 description = "A smarter log parser with color-coded severity, time filtering, regex matching, and stats"
 license = "MIT"
+repository = "https://github.com/dyascj/loggrep-cli"
+homepage = "https://github.com/dyascj/loggrep-cli"
+readme = "README.md"
+keywords = ["cli", "logs", "grep", "terminal", "parser"]
+categories = ["command-line-utilities", "text-processing"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 colored = "2"
 regex = "1"
 chrono = { version = "0.4", features = ["serde"] }
