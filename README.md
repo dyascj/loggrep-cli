@@ -17,12 +17,16 @@ A log parser for the terminal that does what you actually want. Color-codes seve
 
 ## Install
 
-**From source** (requires [Rust](https://rustup.rs/)):
+**Homebrew** (macOS/Linux):
 
 ```bash
-git clone https://github.com/dyascj/loggrep-cli.git
-cd loggrep-cli
-cargo install --path .
+brew install dyascj/loggrep/loggrep
+```
+
+**Cargo** (any platform with Rust):
+
+```bash
+cargo install loggrep
 ```
 
 **Prebuilt binaries** — grab the latest from [Releases](https://github.com/dyascj/loggrep-cli/releases).
